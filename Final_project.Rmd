@@ -1,0 +1,549 @@
+---
+title: 'Final Project'
+output: html_document
+
+---
+__Final Project (due Sun, Dec 6 at 11:59pm)__
+
+Group members: Hasani, Eugeniah, Xin
+
+For the final project, we will use the paper "Persistence Images: A Stable Vector Representation of Persistent Homology" by Adams et al. The code for computing _persistence images_ (PIs) is available at `https://github.com/CSU-TDA/PersistenceImages`.
+
+__1__. This problem involves reproducing some of the results presented in Section 6.1. 
+
+(a) Using the above link, download 150 persistence diagrams (PDs) of Vietoris-Rips filtrations built on point clouds sampled from six different shapes (25 per shape) with some added noise. The noise is added at two levels, so you should have a total of 300 PDs. 
+
+(b) Compute PIs (for homological dimensions 0 and 1) using $\sigma=0.1$, a $20\times 20$ grid and the weighting function defined on page 9.
+
+```{r, include=FALSE}
+library(cluster)
+library(knitr)
+library(TDA)
+library(caret)
+library(ML.RMCL)
+library(randomForest)
+library(TDAstats)
+library(raster)
+```
+
+
+(c) Compute $150 \times 150$ matrices of pairwise distances between PIs for dimensions 0 and 1 using $L_1$, $L_2$ and $L_\infty$ metrics. You should have $2\cdot2\cdot 3= 12$ such matrices.
+
+```{r}
+# Compute 12 dissimilarity matrices 
+PIs <- read.csv("C:/Users/surface/Desktop/BGSU/BGSU Class Materials/2021 Summer/GeneratedDatanew.csv", 
+                header = FALSE)
+PIs <- as.matrix(PIs)
+p <- c(1, 2, Inf)
+m <- c("manhattan", "euclidean", "maximum")
+Dist_PI <- list()
+
+for (i in 1:4){
+    
+  a <- 150*(i-1) + 1
+  b <- 150*i 
+  
+    for (j in 1:3){
+      
+      Dist_PI[[3*(i-1)+j]] <- dist(PIs[a:b,], method = m[j], p = p[j])  
+    
+    }
+  }
+```
+
+
+(d) Feed the distance matrices to the K-medoids algorithm to cluster the 150 point clouds into six shape classes. Use `pam()` function from `R` package `cluster` to implement K-medoids. 
+
+```{r}
+Y_pred <- list()
+
+for (i in 1:length(Dist_PI)){
+  
+  Kmedoids <- pam(Dist_PI[[i]], 6)
+  Y_pred[[i]] <- Kmedoids$clustering
+  
+}
+```
+
+
+(e) Produce a table similar to the one on page 16 that includes clustering performance of PIs in terms of accuracy and computational cost (time required to compute the PIs and run the K-medoids algorithm).
+
+```{r}
+# Compute the accuracy
+Y <- c(rep(1:6, 25))
+prop <- c()
+Accuracy <- c()
+
+# Create mode function
+my_mode <- function(x) {                     
+  unique_x <- unique(x)
+  tabulate_x <- tabulate(match(x, unique_x))
+  unique_x[tabulate_x == max(tabulate_x)]
+}
+
+
+for (i in 1:length(Y_pred)){
+  
+  for (j in 1:6){
+    
+    index <- which(Y %in% j)
+    prop[j] <- mean(Y_pred[[i]][index] == my_mode(Y_pred[[i]][index]))
+    
+  }
+  Accuracy[i] <- mean(prop)
+}
+
+
+# Compute the run time
+RunTime <- c()
+
+for (i in 1:4){
+
+  a <- 150*(i-1) + 1
+  b <- 150*i 
+  
+    for (j in 1:3){
+    
+      startTime <- Sys.time()   
+      Dist <- dist(PIs[a:b,], method = m[j], p = p[j]) 
+      Kmedoids <- pam(Dist, 6)
+      endTime <- Sys.time()
+      RunTime[3*(i-1)+j] <- endTime - startTime
+    
+    }
+  }
+
+# Computation time for producing PIs from PDs by Python in Google Colab
+RunTime_Python <- c(rep(2.59856, 3), rep(0.91680, 3), rep(2.53827, 3), rep(0.98679, 3))
+RunTime_tot <- RunTime + RunTime_Python
+
+kable(cbind(c('PI, $H_0$, $L^1$', 'PI, $H_0$, $L^2$', 'PI, $H_0$, $L^{\U221E}$', 'PI, $H_1$, $L^1$', 
+              'PI, $H_1$, $L^2$','PI, $H_1$, $L^{\U221E}$'), 
+            paste(round(100*Accuracy[c(1:6)], 1), "%", sep=""), 
+            round(RunTime_tot[1:6], 4), 
+            paste(round(100*Accuracy[c(7:12)], 1), "%", sep=""), 
+            round(RunTime_tot[7:12], 4)),
+      col.names = c('Distance Matrix', 'Accuracy (Noise 0.05)', 'Time ((Noise 0.05)', 
+                    'Accuracy (Noise 0.1)', 'Time ((Noise 0.1)'),
+      caption = '<b> Table 1: Accuracy and Time </b>', align = 'c')
+```
+
+
+
+
+
+(f) Repeat (b)-(e) for Betti sequences as your topological summaries.
+
+```{r}
+# Extract Betti sequences from PD
+extractBetti = function(PD, scaleSeq){
+  
+  d <- length(scaleSeq)
+  betti <- numeric(length = d)
+  
+  for (k in 1:d)
+    betti[k] <- sum((scaleSeq[k] >= PD[,1]) & (scaleSeq[k] < PD[,2]))
+  return(betti)
+  
+}
+scaleSeq <- seq(0, 2, length.out = 400)
+
+```
+
+
+
+```{r}
+# Read data
+url = 'https://raw.githubusercontent.com/CSU-TDA/PersistenceImages/master/matlab_code/sixShapeClasses/ToyData_PD_TextFiles/ToyData_PD_' 
+PD <- list()
+N <- 600
+
+urls <- c()  
+for (v in c('n05', 'n1')){
+    
+    for (z in 0:1){
+      
+      for (x in 1:25){
+        
+        for (y in 1:6){
+          
+          urlnew <- paste0(url, v, '_', x, '_', y, '_', z, '.txt')
+          urls <- c(urls, urlnew)
+        }
+  
+      }
+        
+    }
+      
+}
+
+for (i in 1:N) PD[[i]] <- read.table(urls[i], header = FALSE)
+```
+
+
+
+```{r}  
+# Compute Betti sequences (for homological dimensions 0 and 1) setting scale values between 0 and 2 with length 400.
+Betti <- matrix(nrow = N, ncol = length(scaleSeq))
+
+for (i in 1:N){  
+
+  Betti[i,] <- extractBetti(as.matrix(PD[[i]]), scaleSeq)
+
+}
+```
+
+
+```{r}
+# Compute $150 \times 150$ matrices of pairwise distances between Betti sequences for dimensions 0 and 1 using $L_1$, $L_2$ and $L_\infty$ metrics. You should have $2\cdot2\cdot 3= 12$ such matrices.
+
+Dist_Betti <- list()
+
+for (i in 1:4){
+    
+  a <- 150*(i-1) + 1
+  b <- 150*i 
+  
+    for (j in 1:3){
+      
+      Dist_Betti[[3*(i-1)+j]] <- dist(Betti[a:b,], method = m[j], p = p[j])  
+    
+    }
+  }
+```
+
+
+
+```{r}
+# Feed the distance matrices to the K-medoids algorithm to cluster the 150 point clouds into six shape classes. Use `pam()` function from `R` package `cluster` to implement K-medoids. 
+
+Y_pred <- list()
+
+for (i in 1:length(Dist_Betti)){
+  
+  Kmedoids <- pam(Dist_Betti[[i]], 6)
+  Y_pred[[i]] <- Kmedoids$clustering
+  
+}
+
+```
+
+
+
+```{r}
+# Produce a table similar to the one on page 16 that includes clustering performance of PIs in terms of accuracy and computational cost (time required to compute the PIs and run the K-medoids algorithm).
+
+# Compute the accuracy
+Y <- c(rep(1:6, 25))
+prop <- c()
+Accuracy <- c()
+
+
+for (i in 1:length(Y_pred)){
+  
+  for (j in 1:6){
+    
+    index <- which(Y %in% j)
+    prop[j] <- mean(Y_pred[[i]][index] == my_mode(Y_pred[[i]][index]))
+    
+  }
+  
+  Accuracy[i] <- mean(prop)
+ 
+}
+
+
+# Compute the run time
+RunTime <- c()
+
+for (i in 1:4){
+
+  a <- 150*(i-1) + 1
+  b <- 150*i 
+  
+    for (j in 1:3){
+    
+      startTime <- Sys.time()   
+      Dist <- dist(Betti[a:b,], method = m[j], p = p[j]) 
+      Kmedoids <- pam(Dist, 6)
+      endTime <- Sys.time()
+      RunTime[3*(i-1)+j] <- endTime - startTime
+    
+    }
+  }
+
+
+kable(cbind(c('Betti, $H_0$, $L^1$', 'Betti, $H_0$, $L^2$', 'Betti, $H_0$, $L^{\U221E}$', 
+              'Betti, $H_1$, $L^1$', 'Betti, $H_1$, $L^2$','Betti, $H_1$, $L^{\U221E}$'), 
+            paste(round(100*Accuracy[c(1:6)], 1), "%", sep=""), 
+            round(RunTime[1:6], 4), 
+            paste(round(100*Accuracy[c(7:12)], 1), "%", sep=""), 
+            round(RunTime[7:12], 4)),
+      col.names = c('Distance Matrix', 'Accuracy (Noise 0.05)', 'Time ((Noise 0.05)', 
+                    'Accuracy (Noise 0.1)', 'Time ((Noise 0.1)'),
+      caption = '<b> Table 2: Accuracy and Time </b>', align = 'c')
+      
+```
+
+
+(g) Comment on your findings.
+Generally, H1 had better accuracy than H0 for experiment 1 with different noises. Time for computing metrics for H0 was less than H1. The Betti sequences had a more efficient computational time than PIs. 
+
+
+__2__. This problem is about the experiment given in Section 6.4.1.
+
+(a) For each parameter value of $r\in\{2,3.5,4.0,4.1,4.3\}$, generate 50 point clouds in $\mathbb{R}^2$ of size 1000 (called _truncated orbits_) using the _linked twist map_ defined on page 19. Initial conditions $(x_0,y_0)$ are sampled uniformly at random from the unit square with vertices at $(0,0)$, $(0,1)$, $(1,0)$ and $(1,1)$. Some initial conditions lead to atypical point clouds. Come up with a simple heuristic to avoid such initial conditions.
+
+```{r}
+# To avoid atypical point clouds, selecting the initial conditions by the proportion of points spreading out in the 20 by 20 grid.
+set.seed(123)
+r <- c(2, 3.5, 4.0, 4.1, 4.3)
+ras <- raster(xmn=0, ymn=0, xmx=1, ymx=1, res=0.05)
+M <- list()
+
+for (i in 1:length(r)){
+  
+    for (j in 1:50){
+      
+      Prop = 0.4
+        
+      while (Prop < 0.75){
+        x = y = c()
+        Initial <- runif(2, min = 0, max = 1)
+        x[1] <- Initial[1]
+        y[1] <- Initial[2]
+          
+          for (n in 1:1000){
+              
+            x[n+1] <- (x[n] + r[i]*y[n]*(1 - y[n]))%%1
+            y[n+1] <- (y[n] + r[i]*x[n+1]*(1 - x[n+1]))%%1
+              
+          }
+            
+            tab <- table(cellFromXY(ras, cbind(x, y)))
+            ras[as.numeric(names(tab))] <- tab
+            Prop <- length(tab)/400
+ 
+      }
+  
+      M[[50*(i-1)+j]] <- cbind(x, y) 
+      
+    }
+}
+```
+
+
+```{r}
+# Plot the point clouds for five parameter values of r
+par(mfrow=c(2,3))
+plot(M[[1]])
+plot(M[[51]])
+plot(M[[101]])
+plot(M[[151]])
+plot(M[[201]])
+```
+
+
+
+(b) Split your data into training and test sets using a 50/50 ratio.
+
+```{r}
+# Split data by different values of parameter r
+set.seed(1111)
+Y <- c(rep(1, 50), rep(2, 50), rep(3, 50), rep(4, 50), rep(5, 50))
+index <- createDataPartition(Y, p = 0.5, list = FALSE)
+Train <- M[index] 
+Test <- M[setdiff(1:length(M), index)]
+```
+
+
+(c) Compute PIs (for homological dimensions 0 and 1) using Vietoris-Rips filtration and taking $\sigma=0.005$ and a $20\times 20$ grid. You may need to terminate the filtration at a smaller scale value to avoid lengthy computations. 
+
+```{r}
+# Compute PDs
+PD_train = PD_test = list()
+
+for (i in 1:length(Train)){
+    
+      PD_Train <- calculate_homology(Train[[i]], dim = 1, threshold = 0.5)
+      PD_train[[i]] <- rbind(PD_Train, c(0, 0, 0.5))
+      
+      PD_Test <- calculate_homology(Test[[i]], dim = 1, threshold = 0.5)
+      PD_test[[i]] <- rbind(PD_Test, c(0, 0, 0.5))
+
+}
+
+```
+
+
+
+```{r}
+# Modify pers.image function so that we could  have the flexibility on the setup of the maximum values of birth and persistence 
+
+pers.image_Mod <- function (d1, nbins, dimension, h, maxB, maxP){
+    
+    d1 = d1[d1[, 1] == dimension, 2:3, drop = F]
+    d1[, 2] = d1[, 2] - d1[, 1]
+    dx = maxB/nbins
+    dy = maxP/nbins
+    x_lower = seq(0, maxB, length.out = nbins)
+    x_upper = x_lower + dx
+    y_lower = seq(0, maxP, length.out = nbins)
+    y_upper = y_lower + dx
+    PSurface = function(point, maxP) {
+        x = point[1]
+        y = point[2]
+        out1 = pnorm(x_upper, mean = x, sd = h) - pnorm(x_lower, mean = x, sd = h)
+        out2 = pnorm(y_upper, mean = y, sd = h) - pnorm(y_lower, mean = y, sd = h)
+        wgt = y/maxP * (y < maxP) + 1 * (y >= maxP)
+        return(out1 %o% out2 * wgt)
+    }
+    
+    Psurf_mat = apply(d1, 1, PSurface, maxP = maxP)
+    out = apply(Psurf_mat, 1, sum)
+    return(matrix(out, nrow = nbins))
+}
+
+```
+
+
+```{r}
+# Compute PIs
+maxB_train = maxP_train = maxB_test = maxP_test =c() 
+for (i in 1:length(Train)){
+  maxB_train[i] <- max(PD_train[[i]][,2])
+  maxP_train[i] <- max(PD_train[[i]][,3] - PD_train[[i]][,2])
+
+  maxB_test[i] <- max(PD_test[[i]][,2])
+  maxP_test[i] <- max(PD_test[[i]][,3] - PD_test[[i]][,2])
+}
+
+PI_train_0 = PI_train_1 = PI_test_0 = PI_test_1 = list()
+for (i in 1:length(Train)){
+
+    PI_train_0[[i]] <- pers.image_Mod(d1 = PD_train[[i]], nbins = 20, dimension = 0, h = 0.005, 
+                                       maxB = max(maxB_train), maxP = max(maxP_train))
+    
+    PI_train_1[[i]] <- pers.image_Mod(d1 = PD_train[[i]], nbins = 20, dimension = 1, h = 0.005, 
+                                      maxB = max(maxB_train), maxP = max(maxP_train))
+      
+    PI_test_0[[i]] <- pers.image_Mod(d1 = PD_test[[i]], nbins = 20, dimension = 0, h = 0.005, 
+                                     maxB = max(maxB_test), maxP = max(maxP_test))
+    
+    PI_test_1[[i]] <- pers.image_Mod(d1 = PD_test[[i]], nbins = 20, dimension = 1, h = 0.005, 
+                                     maxB = max(maxB_test), maxP = max(maxP_test))
+}
+
+```
+
+
+```{r}
+# Convert PIs to vectors
+for (i in 1:length(Train)){
+  
+    PI_train_0[[i]] <- as.vector(t(PI_train_0[[i]]))
+    PI_train_1[[i]] <- as.vector(t(PI_train_1[[i]]))
+    PI_test_0[[i]] <- as.vector(t(PI_test_0[[i]]))
+    PI_test_1[[i]] <- as.vector(t(PI_test_1[[i]]))
+}
+
+# Convert lists of vectors to matrices
+PI_train_0 <- do.call(rbind, PI_train_0)
+PI_train_1 <- do.call(rbind, PI_train_1)
+PI_test_0 <- do.call(rbind, PI_test_0)
+PI_test_1 <- do.call(rbind, PI_test_1)
+```
+
+
+(d) Fit the Random Forest model (one for each homological dimension) to the training data, where $Y$ is a factor with levels corresponding to the different values of $r$ and PIs are the features. Classify the truncated orbits in the test set according to the parameter value of $r$ they are generated from and report the test accuracies. 
+
+```{r}
+# Get training and test sets of PIs on each homological dimension
+set.seed(0)
+Y_train <- Y[index]
+Y_test <- Y[setdiff(1:length(Y), index)]
+
+newPI_train_0 <- data.frame(PI_train_0, Y_train)
+newPI_train_1 <- data.frame(PI_train_1, Y_train)
+newPI_train_0$Y_train <- as.factor(newPI_train_0$Y_train)
+newPI_train_1$Y_train <- as.factor(newPI_train_1$Y_train)
+PI_test_0 <- data.frame(PI_test_0)
+PI_test_1 <- data.frame(PI_test_1) 
+
+
+# Implement Random Forest for PIs on each homological dimension
+rf_0 <- randomForest(Y_train ~ ., data = newPI_train_0, mtry = 50, ntree = 500, importance = TRUE)
+Y_pred_0 <- predict(rf_0, newdata = PI_test_0)
+Accuracy_0 <- mean(Y_pred_0 == Y_test)
+
+
+rf_1 <- randomForest(Y_train ~ ., data = newPI_train_1, mtry = 50, ntree = 500, importance = TRUE)
+Y_pred_1 <- predict(rf_1, newdata = PI_test_1)
+Accuracy_1 <- mean(Y_pred_1 == Y_test)
+
+kable(cbind(c('PI, $H_0$', 'PI, $H_1$'), c(Accuracy_0, Accuracy_1)),
+      col.names = c('Dimension', 'Accuracy'),
+      caption = '<b> Table 3: Accuracies of PIs for $H_0$ and $H_1$ </b>', align = 'c')
+```
+
+
+(e) Repeat (c)-(d) for Betti sequences. 
+
+```{r}  
+# Compute Betti sequences (for homological dimensions 0 and 1) with 400 length scale.
+extractBetti=function(PD, dimension, scaleSeq){
+  
+  PD <- PD[PD[,1] == dimension, 2:3, drop = F]
+  d <- length(scaleSeq)
+  betti<-numeric(length = d)
+  
+  for (k in 1:d)
+    betti[k]<-sum((scaleSeq[k] >= PD[,1]) & (scaleSeq[k] < PD[,2]))
+  return(betti)
+}
+
+
+scaleSeq <- seq(0, 2, length.out = 400)
+Betti_train_0=Betti_train_1=Betti_test_0=Betti_test_1=matrix(nrow=length(Train), ncol=length(scaleSeq))
+
+for (i in 1:length(Train)){  
+
+  Betti_train_0[i,] <- extractBetti(as.matrix(PD_train[[i]]), dimension = 0, scaleSeq)
+  Betti_train_1[i,] <- extractBetti(as.matrix(PD_train[[i]]), dimension = 1, scaleSeq)
+  Betti_test_0[i,] <- extractBetti(as.matrix(PD_test[[i]]), dimension = 0, scaleSeq)
+  Betti_test_1[i,] <- extractBetti(as.matrix(PD_test[[i]]), dimension = 1, scaleSeq)
+
+}
+```
+
+
+```{r}
+# Get training and test sets of Betti sequences on each homological dimension
+set.seed(1)
+newBetti_train_0 <- data.frame(Betti_train_0, Y_train)
+newBetti_train_1 <- data.frame(Betti_train_1, Y_train)
+newBetti_train_0$Y_train <- as.factor(newBetti_train_0$Y_train)
+newBetti_train_1$Y_train <- as.factor(newBetti_train_1$Y_train)
+Betti_test_0 <- data.frame(Betti_test_0)
+Betti_test_1 <- data.frame(Betti_test_1)
+
+
+# Implement Random Forest for Betti sequences on each homological dimension
+rf_0 <- randomForest(Y_train ~ ., data = newBetti_train_0, mtry = 50, ntree = 500, importance = TRUE)
+Y_pred_0 <- predict(rf_0, newdata = Betti_test_0)
+Accuracy_0 <- mean(Y_pred_0 == Y_test)
+
+rf_1 <- randomForest(Y_train ~ ., data = newBetti_train_1, mtry = 50, ntree = 500, importance = TRUE)
+Y_pred_1 <- predict(rf_1, newdata = Betti_test_1)
+Accuracy_1 <- mean(Y_pred_1 == Y_test)
+
+kable(cbind(c('Betti, $H_0$', 'Betti, $H_1$'), c(Accuracy_0, Accuracy_1)),
+      col.names = c('Dimension', 'Accuracy'),
+      caption = '<b> Table 4: Accuracies of Betti Sequences for $H_0$ and $H_1$ </b>', align = 'c')
+
+```
+
+
+(f) Comment on your findings.
+
+Betti sequences gave a better accuracy than persistence images. The PIs and Betti Sequences approaches did a pretty good job in accuracy despite the perturbations in the noise. 
