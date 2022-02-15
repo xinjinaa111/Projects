@@ -5,8 +5,6 @@ output: html_document
 ---
 __Final Project (due Sun, Dec 6 at 11:59pm)__
 
-Group members: Hasani, Eugeniah, Xin
-
 For the final project, we will use the paper "Persistence Images: A Stable Vector Representation of Persistent Homology" by Adams et al. The code for computing _persistence images_ (PIs) is available at `https://github.com/CSU-TDA/PersistenceImages`.
 
 __1__. This problem involves reproducing some of the results presented in Section 6.1. 
@@ -43,10 +41,8 @@ for (i in 1:4){
   a <- 150*(i-1) + 1
   b <- 150*i 
   
-    for (j in 1:3){
-      
+    for (j in 1:3){ 
       Dist_PI[[3*(i-1)+j]] <- dist(PIs[a:b,], method = m[j], p = p[j])  
-    
     }
   }
 ```
@@ -58,10 +54,8 @@ for (i in 1:4){
 Y_pred <- list()
 
 for (i in 1:length(Dist_PI)){
-  
   Kmedoids <- pam(Dist_PI[[i]], 6)
   Y_pred[[i]] <- Kmedoids$clustering
-  
 }
 ```
 
@@ -85,10 +79,8 @@ my_mode <- function(x) {
 for (i in 1:length(Y_pred)){
   
   for (j in 1:6){
-    
     index <- which(Y %in% j)
     prop[j] <- mean(Y_pred[[i]][index] == my_mode(Y_pred[[i]][index]))
-    
   }
   Accuracy[i] <- mean(prop)
 }
@@ -103,13 +95,11 @@ for (i in 1:4){
   b <- 150*i 
   
     for (j in 1:3){
-    
       startTime <- Sys.time()   
       Dist <- dist(PIs[a:b,], method = m[j], p = p[j]) 
       Kmedoids <- pam(Dist, 6)
       endTime <- Sys.time()
       RunTime[3*(i-1)+j] <- endTime - startTime
-    
     }
   }
 
@@ -131,20 +121,17 @@ kable(cbind(c('PI, $H_0$, $L^1$', 'PI, $H_0$, $L^2$', 'PI, $H_0$, $L^{\U221E}$',
 
 
 
-
 (f) Repeat (b)-(e) for Betti sequences as your topological summaries.
 
 ```{r}
 # Extract Betti sequences from PD
 extractBetti = function(PD, scaleSeq){
-  
   d <- length(scaleSeq)
   betti <- numeric(length = d)
   
   for (k in 1:d)
     betti[k] <- sum((scaleSeq[k] >= PD[,1]) & (scaleSeq[k] < PD[,2]))
-  return(betti)
-  
+  return(betti) 
 }
 scaleSeq <- seq(0, 2, length.out = 400)
 
@@ -159,22 +146,15 @@ PD <- list()
 N <- 600
 
 urls <- c()  
-for (v in c('n05', 'n1')){
-    
+for (v in c('n05', 'n1')){  
     for (z in 0:1){
-      
       for (x in 1:25){
-        
         for (y in 1:6){
-          
           urlnew <- paste0(url, v, '_', x, '_', y, '_', z, '.txt')
           urls <- c(urls, urlnew)
         }
-  
-      }
-        
-    }
-      
+      }  
+    }    
 }
 
 for (i in 1:N) PD[[i]] <- read.table(urls[i], header = FALSE)
@@ -187,9 +167,7 @@ for (i in 1:N) PD[[i]] <- read.table(urls[i], header = FALSE)
 Betti <- matrix(nrow = N, ncol = length(scaleSeq))
 
 for (i in 1:N){  
-
   Betti[i,] <- extractBetti(as.matrix(PD[[i]]), scaleSeq)
-
 }
 ```
 
@@ -199,15 +177,11 @@ for (i in 1:N){
 
 Dist_Betti <- list()
 
-for (i in 1:4){
-    
+for (i in 1:4){ 
   a <- 150*(i-1) + 1
   b <- 150*i 
-  
     for (j in 1:3){
-      
       Dist_Betti[[3*(i-1)+j]] <- dist(Betti[a:b,], method = m[j], p = p[j])  
-    
     }
   }
 ```
@@ -218,14 +192,10 @@ for (i in 1:4){
 # Feed the distance matrices to the K-medoids algorithm to cluster the 150 point clouds into six shape classes. Use `pam()` function from `R` package `cluster` to implement K-medoids. 
 
 Y_pred <- list()
-
 for (i in 1:length(Dist_Betti)){
-  
   Kmedoids <- pam(Dist_Betti[[i]], 6)
   Y_pred[[i]] <- Kmedoids$clustering
-  
 }
-
 ```
 
 
@@ -239,17 +209,12 @@ prop <- c()
 Accuracy <- c()
 
 
-for (i in 1:length(Y_pred)){
-  
+for (i in 1:length(Y_pred)){ 
   for (j in 1:6){
-    
     index <- which(Y %in% j)
-    prop[j] <- mean(Y_pred[[i]][index] == my_mode(Y_pred[[i]][index]))
-    
+    prop[j] <- mean(Y_pred[[i]][index] == my_mode(Y_pred[[i]][index])) 
   }
-  
   Accuracy[i] <- mean(prop)
- 
 }
 
 
@@ -257,18 +222,15 @@ for (i in 1:length(Y_pred)){
 RunTime <- c()
 
 for (i in 1:4){
-
   a <- 150*(i-1) + 1
   b <- 150*i 
   
     for (j in 1:3){
-    
       startTime <- Sys.time()   
       Dist <- dist(Betti[a:b,], method = m[j], p = p[j]) 
       Kmedoids <- pam(Dist, 6)
       endTime <- Sys.time()
       RunTime[3*(i-1)+j] <- endTime - startTime
-    
     }
   }
 
@@ -318,16 +280,12 @@ for (i in 1:length(r)){
             x[n+1] <- (x[n] + r[i]*y[n]*(1 - y[n]))%%1
             y[n+1] <- (y[n] + r[i]*x[n+1]*(1 - x[n+1]))%%1
               
-          }
-            
+          }  
             tab <- table(cellFromXY(ras, cbind(x, y)))
             ras[as.numeric(names(tab))] <- tab
             Prop <- length(tab)/400
- 
       }
-  
       M[[50*(i-1)+j]] <- cbind(x, y) 
-      
     }
 }
 ```
@@ -370,7 +328,6 @@ for (i in 1:length(Train)){
       
       PD_Test <- calculate_homology(Test[[i]], dim = 1, threshold = 0.5)
       PD_test[[i]] <- rbind(PD_Test, c(0, 0, 0.5))
-
 }
 
 ```
@@ -540,7 +497,6 @@ Accuracy_1 <- mean(Y_pred_1 == Y_test)
 kable(cbind(c('Betti, $H_0$', 'Betti, $H_1$'), c(Accuracy_0, Accuracy_1)),
       col.names = c('Dimension', 'Accuracy'),
       caption = '<b> Table 4: Accuracies of Betti Sequences for $H_0$ and $H_1$ </b>', align = 'c')
-
 ```
 
 
