@@ -1,0 +1,136 @@
+---
+title: ''
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## project - Predicting Email Spam using Random Forest and SVM.
+
+Consider `spam` dataset available at 
+`https://web.stanford.edu/~hastie/ElemStatLearn/datasets/spam.data`. 
+There are 57 predictors (the first 57 columns) and the response variable (58th column) is binary denoting whether the e-mail was considered spam (1) or not (0). For more information about the dataset, please see 
+`https://web.stanford.edu/~hastie/ElemStatLearn/datasets/spam.info.txt`. See also the example on page 300 of ESL.
+
+(a) Transform each predictor using function $\log(x+0.1)$. Split the data into `training` and `test` sets based on the list of indicator values of 0 (training) and 1 (test) given at  
+`https://web.stanford.edu/~hastie/ElemStatLearn/datasets/spam.traintest`.
+The training and test sets should have 3065 and 1536 observations respectively. 
+
+```{r, include=FALSE}
+library(ISLR)
+library(readr)
+library(earth)
+library(caret)
+```
+
+```{r}
+spam <- read.table("https://web.stanford.edu/~hastie/ElemStatLearn/datasets/spam.data")
+indicator<-read.table("https://web.stanford.edu/~hastie/ElemStatLearn/datasets/spam.traintest")
+mydata <- data.frame(log(spam[,1:57] + 0.1), spam[,58], indicator)
+names(mydata)[-c(58,59)] <- paste0('V', 1:(ncol(mydata)-2))
+colnames(mydata)[58]<- "Y"
+mydata$Y <- factor(mydata$Y)
+train <- mydata[which(mydata[,59] == 0),]
+test <-  mydata[which(mydata[,59] == 1),]
+```
+
+(b) Fit a Random Forest (RF) model to the `training` set using the `caret` package. Find the optimal value of the tuning parameter `mtry` (the number of randomly selected predictors at each split) using 5-fold CV, where `mtry` varies over $1,5,9,\dots,p$. Evaluate the performance of your final model on the `test` set and report the optimal value of `mtry`, the confusion matrix and the misclassification error rate. Use `set.seed(123)` for reproducibility of your results. 
+
+```{r}
+set.seed(123)
+p <- 57
+rf_grid <- expand.grid(.mtry = seq(1, p, 4))
+rf <- train(Y ~ ., data = train[,-59], 
+            method = 'rf', 
+            metric = 'Accuracy', 
+            tuneGrid = rf_grid, 
+            trControl = trainControl(method = "cv", number = 5))
+rf$bestTune
+```
+
+```{r}
+pred <- predict(rf, test[,-c(58,59)], type = 'raw') 
+table(pred, test[,58])
+mis_rf <- 1 - mean(pred == test[,"Y"])
+mis_rf
+```
+
+The optimal mtry is 5. The misclassification error rate is 0.04752604.
+
+(c) Fit a SVM model to the `training` set using the `caret` package. Try linear, polynomial and radial kernels (method = "svmLinear","svmPoly","svmRadial" within `train()`). For each kernel used, construct appropriate grids for the tuning parameter(s) and tune them using 5-fold CV. Evaluate the performance of your final model on the `test` set and report the optimal values of the tuning parameter(s) for each kernel, the corresponding confusion matrix and the misclassification error rate. Use `set.seed(123)` for reproducibility of your results. 
+
+```{r}
+set.seed(123)
+svml <- train(Y ~ ., data = train[,-59], 
+            method = 'svmLinear',
+            metric = 'Accuracy', 
+            tuneLength = 5, 
+            trControl = trainControl(method = "cv", number = 5))
+svml$bestTune
+```
+
+```{r}
+pred <- predict(svml, test[,-c(58,59)], type = 'raw') 
+table(pred, test[,58])
+mis_svml <- 1 - mean(pred == test[,"Y"])
+mis_svml
+```
+
+The optimal cost is 1. The misclassification error rate is 0.05924479.
+
+```{r}
+set.seed(123)
+svmp <- train(Y ~ ., data = train[,-59], 
+            method = 'svmPoly',
+            metric = 'Accuracy', 
+            tuneLength = 5, 
+            trControl = trainControl(method = "cv", number = 5))
+svmp$bestTune
+```
+
+
+```{r}
+pred <- predict(svmp, test[,-c(58,59)], type = 'raw') 
+table(pred, test[,58])
+mis_svmp <- 1 - mean(pred == test[,"Y"])
+mis_svmp
+```
+
+The optimal turning parameters are degree=3, scale=0.01, and cost=2. The misclassification error rate is 0.05143229.
+
+```{r}
+set.seed(123)
+svmr <- train(Y ~ ., data = train[,-59], 
+            method = 'svmRadial',
+            metric = 'Accuracy', 
+            tuneLength = 5, 
+            trControl = trainControl(method = "cv", number = 5))
+svmr$bestTune
+```
+```{r}
+pred <- predict(svmr, test[,-c(58,59)], type = 'raw') 
+table(pred, test[,58])
+mis_svmr <- 1 - mean(pred == test[,"Y"])
+mis_svmr
+```
+
+The optimal turning parameters are sigma=0.01283403 and cost=3. The misclassification error rate is 0.05338542.
+
+
+(d) Compare your results in (b)-(c).
+
+```{r}
+data.frame(Method = c("Random Forest", "SVM Linear","SVM Polynomial", "SVM Radial"), 
+           Error_Rate = c(mis_rf, mis_svml, mis_svmp, mis_svmr))
+```
+
+Random forest shows the best performance with regard to the smallest misclassification error rate. SVM with radial and polynomial kernels have a bit worse and similar performances. But SVM with linear kernel has worst prediction accuracy. 
+
+
+
+
+
